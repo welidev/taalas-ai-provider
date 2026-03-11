@@ -6,7 +6,7 @@ import { createChatModel, jsonResponse, sseResponse } from "./test-helpers.js"
 describe("TaalasChatLanguageModel", () => {
   it("has correct spec version, provider, and modelId", () => {
     const model = createChatModel()
-    expect(model.specificationVersion).toBe("v2")
+    expect(model.specificationVersion).toBe("v3")
     expect(model.provider).toBe("taalas.chat")
     expect(model.modelId).toBe("llama3.1-8B")
   })
@@ -59,11 +59,10 @@ describe("TaalasChatLanguageModel", () => {
 
       const textContent = result.content.find((c) => c.type === "text")
       expect(textContent?.text).toBe("Hello there!")
-      expect(result.finishReason).toBe("stop")
+      expect(result.finishReason).toEqual({ unified: "stop", raw: "stop" })
       expect(result.usage).toEqual({
-        inputTokens: 5,
-        outputTokens: 3,
-        totalTokens: undefined,
+        inputTokens: { total: 5, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
+        outputTokens: { total: 3, text: undefined, reasoning: undefined },
       })
       expect(result.response?.id).toBe("chatcmpl-123")
     })
@@ -146,13 +145,13 @@ describe("TaalasChatLanguageModel", () => {
         presencePenalty: 0.5,
       })
 
-      const settingNames = result.warnings
-        ?.filter((w) => w.type === "unsupported-setting")
-        .map((w) => w.setting)
+      const features = result.warnings
+        ?.filter((w) => w.type === "unsupported")
+        .map((w) => w.feature)
 
-      expect(settingNames).toContain("topK")
-      expect(settingNames).toContain("frequencyPenalty")
-      expect(settingNames).toContain("presencePenalty")
+      expect(features).toContain("topK")
+      expect(features).toContain("frequencyPenalty")
+      expect(features).toContain("presencePenalty")
     })
 
     it("throws on empty choices array", async () => {
@@ -239,9 +238,9 @@ describe("TaalasChatLanguageModel", () => {
       expect(textStart.id).toBe(textEnd.id)
 
       const finish = parts.find((p) => p.type === "finish")
-      expect(finish.finishReason).toBe("stop")
-      expect(finish.usage.inputTokens).toBe(5)
-      expect(finish.usage.outputTokens).toBe(2)
+      expect(finish.finishReason).toEqual({ unified: "stop", raw: "stop" })
+      expect(finish.usage.inputTokens.total).toBe(5)
+      expect(finish.usage.outputTokens.total).toBe(2)
     })
 
     it("sets stream: true and stream_options in request body", async () => {

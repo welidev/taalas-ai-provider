@@ -7,7 +7,7 @@ describe("TaalasCompletionLanguageModel", () => {
   it("has correct spec version, provider, and modelId", () => {
     const model = createCompletionModel()
 
-    expect(model.specificationVersion).toBe("v2")
+    expect(model.specificationVersion).toBe("v3")
     expect(model.provider).toBe("taalas.completion")
     expect(model.modelId).toBe("llama3.1-8B")
   })
@@ -57,11 +57,10 @@ describe("TaalasCompletionLanguageModel", () => {
 
       const textContent = result.content.find((c) => c.type === "text")
       expect(textContent?.text).toBe("Why did the chicken cross the road?")
-      expect(result.finishReason).toBe("stop")
+      expect(result.finishReason).toEqual({ unified: "stop", raw: "stop" })
       expect(result.usage).toEqual({
-        inputTokens: 3,
-        outputTokens: 8,
-        totalTokens: undefined,
+        inputTokens: { total: 3, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
+        outputTokens: { total: 8, text: undefined, reasoning: undefined },
       })
     })
 
@@ -169,9 +168,9 @@ describe("TaalasCompletionLanguageModel", () => {
       expect(textDeltas).toEqual(["Why did ", "the chicken", ""])
 
       const finish = parts.find((p) => p.type === "finish")
-      expect(finish.finishReason).toBe("stop")
-      expect(finish.usage.inputTokens).toBe(3)
-      expect(finish.usage.outputTokens).toBe(5)
+      expect(finish.finishReason).toEqual({ unified: "stop", raw: "stop" })
+      expect(finish.usage.inputTokens.total).toBe(3)
+      expect(finish.usage.outputTokens.total).toBe(5)
     })
 
     it("sets stream: true in request body", async () => {

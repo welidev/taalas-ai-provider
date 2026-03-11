@@ -1,11 +1,11 @@
-import type { LanguageModelV2Prompt } from "@ai-sdk/provider"
+import type { LanguageModelV3Prompt } from "@ai-sdk/provider"
 import { UnsupportedFunctionalityError } from "@ai-sdk/provider"
 import { describe, expect, it } from "vitest"
 import { convertToTaalasChatMessages } from "./convert-to-taalas-chat-messages.js"
 
 describe("convertToTaalasChatMessages", () => {
   it("converts a system message", () => {
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV3Prompt = [
       { role: "system", content: "You are helpful." },
     ]
 
@@ -15,7 +15,7 @@ describe("convertToTaalasChatMessages", () => {
   })
 
   it("converts a single text user message", () => {
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV3Prompt = [
       { role: "user", content: [{ type: "text", text: "Hello" }] },
     ]
 
@@ -25,7 +25,7 @@ describe("convertToTaalasChatMessages", () => {
   })
 
   it("concatenates multiple text parts in a user message", () => {
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV3Prompt = [
       {
         role: "user",
         content: [
@@ -41,7 +41,7 @@ describe("convertToTaalasChatMessages", () => {
   })
 
   it("converts an assistant message with text", () => {
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV3Prompt = [
       {
         role: "assistant",
         content: [{ type: "text", text: "I can help with that." }],
@@ -54,7 +54,7 @@ describe("convertToTaalasChatMessages", () => {
   })
 
   it("converts a multi-turn conversation", () => {
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV3Prompt = [
       { role: "system", content: "Be concise." },
       { role: "user", content: [{ type: "text", text: "Hi" }] },
       { role: "assistant", content: [{ type: "text", text: "Hello!" }] },
@@ -70,7 +70,7 @@ describe("convertToTaalasChatMessages", () => {
   })
 
   it("throws on file content in user messages", () => {
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV3Prompt = [
       {
         role: "user",
         content: [
@@ -89,7 +89,7 @@ describe("convertToTaalasChatMessages", () => {
   })
 
   it("throws on tool-call content in assistant messages", () => {
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV3Prompt = [
       {
         role: "assistant",
         content: [
@@ -109,7 +109,7 @@ describe("convertToTaalasChatMessages", () => {
   })
 
   it("throws on tool role messages", () => {
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV3Prompt = [
       {
         role: "tool",
         content: [

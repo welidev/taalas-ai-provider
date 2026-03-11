@@ -37,9 +37,9 @@ describe("createTaalas", () => {
     expect(model.modelId).toBe("llama3.1-8B")
   })
 
-  it("textEmbeddingModel() throws", () => {
+  it("embeddingModel() throws", () => {
     const provider = createTaalas({ apiKey: "test-key" })
-    expect(() => provider.textEmbeddingModel("anything" as any)).toThrow(
+    expect(() => provider.embeddingModel("anything" as any)).toThrow(
       "Taalas does not support embedding models.",
     )
   })

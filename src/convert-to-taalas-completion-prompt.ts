@@ -1,4 +1,4 @@
-import type { LanguageModelV2Prompt } from "@ai-sdk/provider"
+import type { LanguageModelV3Prompt } from "@ai-sdk/provider"
 import {
   InvalidPromptError,
   UnsupportedFunctionalityError,
@@ -9,7 +9,7 @@ export function convertToTaalasCompletionPrompt({
   user = "user",
   assistant = "assistant",
 }: {
-  prompt: LanguageModelV2Prompt
+  prompt: LanguageModelV3Prompt
   user?: string
   assistant?: string
 }): {

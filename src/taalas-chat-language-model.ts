@@ -1,8 +1,9 @@
 import type {
-  LanguageModelV2,
-  LanguageModelV2CallOptions,
-  LanguageModelV2FinishReason,
-  LanguageModelV2StreamPart,
+  LanguageModelV3,
+  LanguageModelV3CallOptions,
+  LanguageModelV3FinishReason,
+  LanguageModelV3StreamPart,
+  LanguageModelV3Usage,
 } from "@ai-sdk/provider"
 import type { ParseResult } from "@ai-sdk/provider-utils"
 import type {
@@ -71,8 +72,24 @@ const TaalasChatChunkSchema = z.object({
     .nullish(),
 })
 
-export class TaalasChatLanguageModel implements LanguageModelV2 {
-  readonly specificationVersion = "v2"
+function mapUsage(usage: { prompt_tokens?: number | null; completion_tokens?: number | null; total_tokens?: number | null } | null | undefined): LanguageModelV3Usage {
+  return {
+    inputTokens: {
+      total: usage?.prompt_tokens ?? undefined,
+      noCache: undefined,
+      cacheRead: undefined,
+      cacheWrite: undefined,
+    },
+    outputTokens: {
+      total: usage?.completion_tokens ?? undefined,
+      text: undefined,
+      reasoning: undefined,
+    },
+  }
+}
+
+export class TaalasChatLanguageModel implements LanguageModelV3 {
+  readonly specificationVersion = "v3"
   readonly supportedUrls = {}
 
   readonly modelId: TaalasChatModelId
@@ -94,7 +111,7 @@ export class TaalasChatLanguageModel implements LanguageModelV2 {
     return this.config.provider
   }
 
-  private getArgs(options: LanguageModelV2CallOptions) {
+  private getArgs(options: LanguageModelV3CallOptions) {
     const warnings = collectUnsupportedWarnings({
       topK: options.topK,
       frequencyPenalty: options.frequencyPenalty,
@@ -127,8 +144,8 @@ export class TaalasChatLanguageModel implements LanguageModelV2 {
   }
 
   async doGenerate(
-    options: LanguageModelV2CallOptions,
-  ): Promise<Awaited<ReturnType<LanguageModelV2["doGenerate"]>>> {
+    options: LanguageModelV3CallOptions,
+  ): Promise<Awaited<ReturnType<LanguageModelV3["doGenerate"]>>> {
     const { args, warnings } = this.getArgs(options)
 
     const { responseHeaders, value: responseBody } = await postJsonToApi({
@@ -152,11 +169,7 @@ export class TaalasChatLanguageModel implements LanguageModelV2 {
     return {
       content: [{ type: "text", text: choice.message.content ?? "" }],
       finishReason: mapTaalasFinishReason(choice.finish_reason),
-      usage: {
-        inputTokens: responseBody.usage?.prompt_tokens ?? undefined,
-        outputTokens: responseBody.usage?.completion_tokens ?? undefined,
-        totalTokens: responseBody.usage?.total_tokens ?? undefined,
-      },
+      usage: mapUsage(responseBody.usage),
       response: {
         ...getResponseMetadata(responseBody),
         headers: responseHeaders,
@@ -168,8 +181,8 @@ export class TaalasChatLanguageModel implements LanguageModelV2 {
   }
 
   async doStream(
-    options: LanguageModelV2CallOptions,
-  ): Promise<Awaited<ReturnType<LanguageModelV2["doStream"]>>> {
+    options: LanguageModelV3CallOptions,
+  ): Promise<Awaited<ReturnType<LanguageModelV3["doStream"]>>> {
     const { args, warnings } = this.getArgs(options)
     const generateId = this.config.generateId ?? defaultGenerateId
 
@@ -190,16 +203,8 @@ export class TaalasChatLanguageModel implements LanguageModelV2 {
       fetch: this.config.fetch,
     })
 
-    let finishReason: LanguageModelV2FinishReason = "unknown"
-    let usage: {
-      inputTokens: number | undefined
-      outputTokens: number | undefined
-      totalTokens: number | undefined
-    } = {
-      inputTokens: undefined,
-      outputTokens: undefined,
-      totalTokens: undefined,
-    }
+    let finishReason: LanguageModelV3FinishReason = { unified: "other", raw: undefined }
+    let usage: LanguageModelV3Usage = mapUsage(undefined)
     let isFirstChunk = true
     let textId: string | undefined
 
@@ -207,11 +212,11 @@ export class TaalasChatLanguageModel implements LanguageModelV2 {
       stream: response.pipeThrough(
         new TransformStream<
           ParseResult<z.infer<typeof TaalasChatChunkSchema>>,
-          LanguageModelV2StreamPart
+          LanguageModelV3StreamPart
         >({
           transform(chunk, controller) {
             if (!chunk.success) {
-              finishReason = "error"
+              finishReason = { unified: "error", raw: undefined }
               controller.enqueue({ type: "error", error: chunk.error })
               return
             }
@@ -228,11 +233,7 @@ export class TaalasChatLanguageModel implements LanguageModelV2 {
             }
 
             if (value.usage != null) {
-              usage = {
-                inputTokens: value.usage.prompt_tokens ?? undefined,
-                outputTokens: value.usage.completion_tokens ?? undefined,
-                totalTokens: value.usage.total_tokens ?? undefined,
-              }
+              usage = mapUsage(value.usage)
             }
 
             const choice = value.choices[0]

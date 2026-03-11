@@ -1,6 +1,6 @@
 {
   "name": "taalas-ai-provider",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Vercel AI SDK provider for the Taalas API (llama3.1-8B)",
   "license": "MIT",
   "repository": {

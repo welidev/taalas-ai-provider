@@ -1,4 +1,4 @@
-import type { LanguageModelV2CallWarning } from "@ai-sdk/provider"
+import type { SharedV3Warning } from "@ai-sdk/provider"
 
 export function collectUnsupportedWarnings({
   topK,
@@ -10,25 +10,25 @@ export function collectUnsupportedWarnings({
   frequencyPenalty?: number
   presencePenalty?: number
   responseFormat?: { type: string }
-}): LanguageModelV2CallWarning[] {
-  const warnings: LanguageModelV2CallWarning[] = []
+}): SharedV3Warning[] {
+  const warnings: SharedV3Warning[] = []
 
   if (topK != null) {
-    warnings.push({ type: "unsupported-setting", setting: "topK" })
+    warnings.push({ type: "unsupported", feature: "topK" })
   }
 
   if (frequencyPenalty != null) {
-    warnings.push({ type: "unsupported-setting", setting: "frequencyPenalty" })
+    warnings.push({ type: "unsupported", feature: "frequencyPenalty" })
   }
 
   if (presencePenalty != null) {
-    warnings.push({ type: "unsupported-setting", setting: "presencePenalty" })
+    warnings.push({ type: "unsupported", feature: "presencePenalty" })
   }
 
   if (responseFormat != null && responseFormat.type !== "text") {
     warnings.push({
-      type: "unsupported-setting",
-      setting: "responseFormat",
+      type: "unsupported",
+      feature: "responseFormat",
       details: "JSON response format is not supported by Taalas.",
     })
   }

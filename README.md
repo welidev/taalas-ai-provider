@@ -2,7 +2,7 @@
 
 [Vercel AI SDK](https://sdk.vercel.ai/) provider for the [Taalas](https://taalas.com) API.
 
-Supports chat and completion endpoints with streaming. Compatible with `ai@^6.0.0` (AI SDK v6 / LanguageModelV2).
+Supports chat and completion endpoints with streaming. Compatible with `ai@^6.0.0` (AI SDK v6 / LanguageModelV3).
 
 ## Installation
 
@@ -79,6 +79,7 @@ const taalas = createTaalas({
 
 | taalas-ai-provider | ai (peer dep) | Specification |
 |-------------------|---------------|---------------|
+| `0.3.x`           | `^6.0.0`      | LanguageModelV3 |
 | `0.2.x`           | `^6.0.0`      | LanguageModelV2 |
 | `0.1.x`           | `^4.0.0`      | LanguageModelV1 |
 

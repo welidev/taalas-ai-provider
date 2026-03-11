@@ -1,9 +1,9 @@
-import type { LanguageModelV2Prompt } from "@ai-sdk/provider"
+import type { LanguageModelV3Prompt } from "@ai-sdk/provider"
 import { UnsupportedFunctionalityError } from "@ai-sdk/provider"
 import type { TaalasChatPrompt } from "./taalas-api-types.js"
 
 export function convertToTaalasChatMessages(
-  prompt: LanguageModelV2Prompt,
+  prompt: LanguageModelV3Prompt,
 ): TaalasChatPrompt {
   const messages: TaalasChatPrompt = []
 

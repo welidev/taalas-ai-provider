@@ -1,16 +1,16 @@
-import type { LanguageModelV2FinishReason } from "@ai-sdk/provider"
+import type { LanguageModelV3FinishReason } from "@ai-sdk/provider"
 
 export function mapTaalasFinishReason(
   finishReason: string | null | undefined,
-): LanguageModelV2FinishReason {
+): LanguageModelV3FinishReason {
   switch (finishReason) {
     case "stop":
-      return "stop"
+      return { unified: "stop", raw: finishReason }
     case "length":
-      return "length"
+      return { unified: "length", raw: finishReason }
     case "content_filter":
-      return "content-filter"
+      return { unified: "content-filter", raw: finishReason }
     default:
-      return "unknown"
+      return { unified: "other", raw: finishReason ?? undefined }
   }
 }

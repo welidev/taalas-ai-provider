@@ -1,11 +1,11 @@
-import type { LanguageModelV2Prompt } from "@ai-sdk/provider"
+import type { LanguageModelV3Prompt } from "@ai-sdk/provider"
 import { UnsupportedFunctionalityError } from "@ai-sdk/provider"
 import { describe, expect, it } from "vitest"
 import { convertToTaalasCompletionPrompt } from "./convert-to-taalas-completion-prompt.js"
 
 describe("convertToTaalasCompletionPrompt", () => {
   it("returns raw text for a single-text user message", () => {
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV3Prompt = [
       { role: "user", content: [{ type: "text", text: "Tell me a joke" }] },
     ]
 
@@ -16,7 +16,7 @@ describe("convertToTaalasCompletionPrompt", () => {
   })
 
   it("formats a multi-turn conversation with system prefix", () => {
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV3Prompt = [
       { role: "system", content: "You are a comedian." },
       { role: "user", content: [{ type: "text", text: "Tell me a joke" }] },
     ]
@@ -30,7 +30,7 @@ describe("convertToTaalasCompletionPrompt", () => {
   })
 
   it("includes assistant turns in the formatted prompt", () => {
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV3Prompt = [
       { role: "user", content: [{ type: "text", text: "Hi" }] },
       { role: "assistant", content: [{ type: "text", text: "Hello!" }] },
       { role: "user", content: [{ type: "text", text: "Joke?" }] },
@@ -44,7 +44,7 @@ describe("convertToTaalasCompletionPrompt", () => {
   })
 
   it("throws on file content", () => {
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV3Prompt = [
       {
         role: "user",
         content: [
@@ -63,7 +63,7 @@ describe("convertToTaalasCompletionPrompt", () => {
   })
 
   it("throws on tool messages", () => {
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV3Prompt = [
       {
         role: "tool",
         content: [
@@ -83,7 +83,7 @@ describe("convertToTaalasCompletionPrompt", () => {
   })
 
   it("throws on a second system message", () => {
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV3Prompt = [
       { role: "system", content: "First" },
       { role: "user", content: [{ type: "text", text: "Hi" }] },
       { role: "system", content: "Second" },
