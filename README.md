@@ -80,7 +80,7 @@ const taalas = createTaalas({
 | taalas-ai-provider | ai (peer dep) | Specification |
 |-------------------|---------------|---------------|
 | `0.3.x`           | `^6.0.0`      | LanguageModelV3 |
-| `0.2.x`           | `^6.0.0`      | LanguageModelV2 |
+| `0.2.x`           | `^5.0.0`      | LanguageModelV2 |
 | `0.1.x`           | `^4.0.0`      | LanguageModelV1 |
 
 ## Limitations
