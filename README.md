@@ -2,15 +2,13 @@
 
 [Vercel AI SDK](https://sdk.vercel.ai/) provider for the [Taalas](https://taalas.com) API.
 
-Supports chat and completion endpoints with streaming.
+Supports chat and completion endpoints with streaming. Compatible with `ai@^6.0.0` (AI SDK v6 / LanguageModelV2).
 
 ## Installation
 
 ```bash
-npm install taalas-ai-provider
+npm install taalas-ai-provider ai
 ```
-
-The package requires `zod` as a peer dependency (^3.0.0).
 
 ## Setup
 
@@ -77,13 +75,24 @@ const taalas = createTaalas({
 })
 ```
 
+## Compatibility
+
+| taalas-ai-provider | ai (peer dep) | Specification |
+|-------------------|---------------|---------------|
+| `0.2.x`           | `^6.0.0`      | LanguageModelV2 |
+| `0.1.x`           | `^4.0.0`      | LanguageModelV1 |
+
 ## Limitations
 
 - **No tool/function calling** -- throws `UnsupportedFunctionalityError`
-- **No structured output** (object-json / object-tool modes)
-- **No image inputs** -- text only
+- **No structured output** (JSON response format)
+- **No file/image inputs** -- text only
 - **No embedding models**
 - `topK`, `frequencyPenalty`, `presencePenalty` are accepted but produce warnings (not sent to API)
+
+## Disclaimer
+
+This is a community project and is not affiliated with, endorsed by, or officially connected to Taalas in any way.
 
 ## License
 

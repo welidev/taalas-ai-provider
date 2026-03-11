@@ -6,15 +6,14 @@ import { createChatModel, jsonResponse, sseResponse } from "./test-helpers.js"
 describe("TaalasChatLanguageModel", () => {
   it("has correct spec version, provider, and modelId", () => {
     const model = createChatModel()
-    expect(model.specificationVersion).toBe("v1")
+    expect(model.specificationVersion).toBe("v2")
     expect(model.provider).toBe("taalas.chat")
     expect(model.modelId).toBe("llama3.1-8B")
   })
 
-  it("does not support structured outputs or object generation", () => {
+  it("has empty supportedUrls", () => {
     const model = createChatModel()
-    expect(model.defaultObjectGenerationMode).toBeUndefined()
-    expect(model.supportsStructuredOutputs).toBe(false)
+    expect(model.supportedUrls).toEqual({})
   })
 
   describe("doGenerate", () => {
@@ -49,8 +48,6 @@ describe("TaalasChatLanguageModel", () => {
       })
 
       const result = await model.doGenerate({
-        inputFormat: "messages",
-        mode: { type: "regular" },
         prompt: [
           { role: "user", content: [{ type: "text", text: "Hi" }] },
         ],
@@ -59,13 +56,19 @@ describe("TaalasChatLanguageModel", () => {
       expect(capturedUrl).toBe("https://api.taalas.com/v1/chat/completions")
       expect(capturedBody.model).toBe("llama3.1-8B")
       expect(capturedBody.messages).toEqual([{ role: "user", content: "Hi" }])
-      expect(result.text).toBe("Hello there!")
+
+      const textContent = result.content.find((c) => c.type === "text")
+      expect(textContent?.text).toBe("Hello there!")
       expect(result.finishReason).toBe("stop")
-      expect(result.usage).toEqual({ promptTokens: 5, completionTokens: 3 })
+      expect(result.usage).toEqual({
+        inputTokens: 5,
+        outputTokens: 3,
+        totalTokens: undefined,
+      })
       expect(result.response?.id).toBe("chatcmpl-123")
     })
 
-    it("passes temperature and max tokens", async () => {
+    it("passes temperature and maxOutputTokens", async () => {
       let capturedBody: any = null
 
       const model = createChatModel({}, {
@@ -86,13 +89,11 @@ describe("TaalasChatLanguageModel", () => {
       })
 
       await model.doGenerate({
-        inputFormat: "messages",
-        mode: { type: "regular" },
         prompt: [
           { role: "user", content: [{ type: "text", text: "Hi" }] },
         ],
         temperature: 0.7,
-        maxTokens: 100,
+        maxOutputTokens: 100,
       })
 
       expect(capturedBody.temperature).toBe(0.7)
@@ -120,8 +121,6 @@ describe("TaalasChatLanguageModel", () => {
       })
 
       await model.doGenerate({
-        inputFormat: "messages",
-        mode: { type: "regular" },
         prompt: [{ role: "user", content: [{ type: "text", text: "Hi" }] }],
       })
 
@@ -141,8 +140,6 @@ describe("TaalasChatLanguageModel", () => {
       })
 
       const result = await model.doGenerate({
-        inputFormat: "messages",
-        mode: { type: "regular" },
         prompt: [{ role: "user", content: [{ type: "text", text: "Hi" }] }],
         topK: 5,
         frequencyPenalty: 0.5,
@@ -151,7 +148,7 @@ describe("TaalasChatLanguageModel", () => {
 
       const settingNames = result.warnings
         ?.filter((w) => w.type === "unsupported-setting")
-        .map((w) => (w as { setting: string }).setting)
+        .map((w) => w.setting)
 
       expect(settingNames).toContain("topK")
       expect(settingNames).toContain("frequencyPenalty")
@@ -169,8 +166,6 @@ describe("TaalasChatLanguageModel", () => {
 
       await expect(
         model.doGenerate({
-          inputFormat: "messages",
-          mode: { type: "regular" },
           prompt: [{ role: "user", content: [{ type: "text", text: "Hi" }] }],
         }),
       ).rejects.toThrow("No choices returned in Taalas chat response")
@@ -180,49 +175,15 @@ describe("TaalasChatLanguageModel", () => {
       const model = createChatModel()
       await expect(
         model.doGenerate({
-          inputFormat: "messages",
-          mode: {
-            type: "regular",
-            tools: [
-              {
-                type: "function",
-                name: "test",
-                description: "test",
-                parameters: { type: "object", properties: {} },
-              },
-            ],
-          },
           prompt: [{ role: "user", content: [{ type: "text", text: "Hi" }] }],
-        }),
-      ).rejects.toThrow(UnsupportedFunctionalityError)
-    })
-
-    it("throws on object-json mode", async () => {
-      const model = createChatModel()
-      await expect(
-        model.doGenerate({
-          inputFormat: "messages",
-          mode: { type: "object-json" },
-          prompt: [{ role: "user", content: [{ type: "text", text: "Hi" }] }],
-        }),
-      ).rejects.toThrow(UnsupportedFunctionalityError)
-    })
-
-    it("throws on object-tool mode", async () => {
-      const model = createChatModel()
-      await expect(
-        model.doGenerate({
-          inputFormat: "messages",
-          mode: {
-            type: "object-tool",
-            tool: {
+          tools: [
+            {
               type: "function",
               name: "test",
               description: "test",
-              parameters: { type: "object", properties: {} },
+              inputSchema: { type: "object", properties: {} },
             },
-          },
-          prompt: [{ role: "user", content: [{ type: "text", text: "Hi" }] }],
+          ],
         }),
       ).rejects.toThrow(UnsupportedFunctionalityError)
     })
@@ -251,8 +212,6 @@ describe("TaalasChatLanguageModel", () => {
       })
 
       const { stream } = await model.doStream({
-        inputFormat: "messages",
-        mode: { type: "regular" },
         prompt: [{ role: "user", content: [{ type: "text", text: "Hi" }] }],
       })
 
@@ -264,18 +223,25 @@ describe("TaalasChatLanguageModel", () => {
         parts.push(value)
       }
 
-      expect(parts[0].type).toBe("response-metadata")
-      expect(parts[0].id).toBe("chatcmpl-1")
+      expect(parts[0].type).toBe("stream-start")
+      expect(parts[1].type).toBe("response-metadata")
+      expect(parts[1].id).toBe("chatcmpl-1")
 
       const textDeltas = parts
         .filter((p) => p.type === "text-delta")
-        .map((p) => p.textDelta)
+        .map((p) => p.delta)
       expect(textDeltas).toEqual(["Hello", " world"])
+
+      const textStart = parts.find((p) => p.type === "text-start")
+      expect(textStart).toBeDefined()
+      const textEnd = parts.find((p) => p.type === "text-end")
+      expect(textEnd).toBeDefined()
+      expect(textStart.id).toBe(textEnd.id)
 
       const finish = parts.find((p) => p.type === "finish")
       expect(finish.finishReason).toBe("stop")
-      expect(finish.usage.promptTokens).toBe(5)
-      expect(finish.usage.completionTokens).toBe(2)
+      expect(finish.usage.inputTokens).toBe(5)
+      expect(finish.usage.outputTokens).toBe(2)
     })
 
     it("sets stream: true and stream_options in request body", async () => {
@@ -308,8 +274,6 @@ describe("TaalasChatLanguageModel", () => {
       })
 
       const { stream } = await model.doStream({
-        inputFormat: "messages",
-        mode: { type: "regular" },
         prompt: [{ role: "user", content: [{ type: "text", text: "Hi" }] }],
       })
 

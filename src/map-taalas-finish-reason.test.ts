@@ -10,6 +10,10 @@ describe("mapTaalasFinishReason", () => {
     expect(mapTaalasFinishReason("length")).toBe("length")
   })
 
+  it('maps "content_filter" to "content-filter"', () => {
+    expect(mapTaalasFinishReason("content_filter")).toBe("content-filter")
+  })
+
   it('maps null to "unknown"', () => {
     expect(mapTaalasFinishReason(null)).toBe("unknown")
   })

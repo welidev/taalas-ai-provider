@@ -1,9 +1,9 @@
-import type { LanguageModelV1Prompt } from "@ai-sdk/provider"
+import type { LanguageModelV2Prompt } from "@ai-sdk/provider"
 import { UnsupportedFunctionalityError } from "@ai-sdk/provider"
 import type { TaalasChatPrompt } from "./taalas-api-types.js"
 
 export function convertToTaalasChatMessages(
-  prompt: LanguageModelV1Prompt,
+  prompt: LanguageModelV2Prompt,
 ): TaalasChatPrompt {
   const messages: TaalasChatPrompt = []
 
@@ -19,9 +19,9 @@ export function convertToTaalasChatMessages(
             switch (part.type) {
               case "text":
                 return part.text
-              case "image":
+              case "file":
                 throw new UnsupportedFunctionalityError({
-                  functionality: "Image content parts in user messages",
+                  functionality: "File content parts in user messages",
                 })
               default:
                 throw new UnsupportedFunctionalityError({

@@ -1,4 +1,4 @@
-import type { LanguageModelV1, ProviderV1 } from "@ai-sdk/provider"
+import type { LanguageModelV2, ProviderV2 } from "@ai-sdk/provider"
 import type { FetchFunction } from "@ai-sdk/provider-utils"
 import type {
   TaalasChatModelId,
@@ -12,26 +12,26 @@ import { loadApiKey, withoutTrailingSlash } from "@ai-sdk/provider-utils"
 import { TaalasChatLanguageModel } from "./taalas-chat-language-model.js"
 import { TaalasCompletionLanguageModel } from "./taalas-completion-language-model.js"
 
-export interface TaalasProvider extends ProviderV1 {
+export interface TaalasProvider extends ProviderV2 {
   (
     modelId: TaalasChatModelId,
     settings?: TaalasChatSettings,
-  ): LanguageModelV1
+  ): LanguageModelV2
 
   chatModel: (
     modelId: TaalasChatModelId,
     settings?: TaalasChatSettings,
-  ) => LanguageModelV1
+  ) => LanguageModelV2
 
   languageModel: (
     modelId: TaalasChatModelId,
     settings?: TaalasChatSettings,
-  ) => LanguageModelV1
+  ) => LanguageModelV2
 
   completion: (
     modelId: TaalasCompletionModelId,
     settings?: TaalasCompletionSettings,
-  ) => LanguageModelV1
+  ) => LanguageModelV2
 }
 
 export interface TaalasProviderSettings {
@@ -111,6 +111,9 @@ export function createTaalas(
   provider.completion = createCompletionModel
   provider.textEmbeddingModel = () => {
     throw new Error("Taalas does not support embedding models.")
+  }
+  provider.imageModel = () => {
+    throw new Error("Taalas does not support image models.")
   }
 
   return provider as TaalasProvider

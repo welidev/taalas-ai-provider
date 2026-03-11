@@ -1,13 +1,10 @@
 import type {
-  APICallError,
-  LanguageModelV1,
-  LanguageModelV1FinishReason,
-  LanguageModelV1StreamPart,
+  LanguageModelV2,
+  LanguageModelV2CallOptions,
+  LanguageModelV2FinishReason,
+  LanguageModelV2StreamPart,
 } from "@ai-sdk/provider"
-import type {
-  ParseResult,
-  ResponseHandler,
-} from "@ai-sdk/provider-utils"
+import type { ParseResult } from "@ai-sdk/provider-utils"
 import type {
   TaalasChatModelId,
   TaalasChatSettings,
@@ -18,6 +15,7 @@ import {
   combineHeaders,
   createEventSourceResponseHandler,
   createJsonResponseHandler,
+  generateId as defaultGenerateId,
   postJsonToApi,
 } from "@ai-sdk/provider-utils"
 import { z } from "zod"
@@ -44,6 +42,7 @@ const TaalasChatResponseSchema = z.object({
     .object({
       prompt_tokens: z.number().nullish(),
       completion_tokens: z.number().nullish(),
+      total_tokens: z.number().nullish(),
     })
     .nullish(),
 })
@@ -67,20 +66,19 @@ const TaalasChatChunkSchema = z.object({
     .object({
       prompt_tokens: z.number().nullish(),
       completion_tokens: z.number().nullish(),
+      total_tokens: z.number().nullish(),
     })
     .nullish(),
 })
 
-export class TaalasChatLanguageModel implements LanguageModelV1 {
-  readonly specificationVersion = "v1"
-  readonly defaultObjectGenerationMode = undefined
-  readonly supportsStructuredOutputs = false
+export class TaalasChatLanguageModel implements LanguageModelV2 {
+  readonly specificationVersion = "v2"
+  readonly supportedUrls = {}
 
   readonly modelId: TaalasChatModelId
   readonly settings: TaalasChatSettings
 
   private readonly config: TaalasModelConfig
-  private readonly failedResponseHandler: ResponseHandler<APICallError>
 
   constructor(
     modelId: TaalasChatModelId,
@@ -90,85 +88,54 @@ export class TaalasChatLanguageModel implements LanguageModelV1 {
     this.modelId = modelId
     this.settings = settings
     this.config = config
-    this.failedResponseHandler = taalasFailedResponseHandler
   }
 
   get provider(): string {
     return this.config.provider
   }
 
-  private getArgs({
-    mode,
-    prompt,
-    maxTokens,
-    temperature,
-    stopSequences,
-    topP,
-    topK,
-    frequencyPenalty,
-    presencePenalty,
-    responseFormat,
-  }: Parameters<LanguageModelV1["doGenerate"]>[0]) {
-    const type = mode.type
+  private getArgs(options: LanguageModelV2CallOptions) {
     const warnings = collectUnsupportedWarnings({
-      topK,
-      frequencyPenalty,
-      presencePenalty,
-      responseFormat,
+      topK: options.topK,
+      frequencyPenalty: options.frequencyPenalty,
+      presencePenalty: options.presencePenalty,
+      responseFormat: options.responseFormat,
     })
 
-    const baseArgs = {
+    if (options.tools?.length) {
+      throw new UnsupportedFunctionalityError({
+        functionality: "tools",
+      })
+    }
+    if (options.toolChoice) {
+      throw new UnsupportedFunctionalityError({
+        functionality: "toolChoice",
+      })
+    }
+
+    const args = {
       model: this.modelId,
-      messages: convertToTaalasChatMessages(prompt),
-      max_completion_tokens: maxTokens,
-      temperature,
-      top_p: topP,
-      stop: stopSequences,
+      messages: convertToTaalasChatMessages(options.prompt),
+      max_completion_tokens: options.maxOutputTokens,
+      temperature: options.temperature,
+      top_p: options.topP,
+      stop: options.stopSequences,
       user: this.settings.user,
     }
 
-    switch (type) {
-      case "regular": {
-        if (mode.tools?.length) {
-          throw new UnsupportedFunctionalityError({
-            functionality: "tools",
-          })
-        }
-        if (mode.toolChoice) {
-          throw new UnsupportedFunctionalityError({
-            functionality: "toolChoice",
-          })
-        }
-        return { args: baseArgs, warnings }
-      }
-
-      case "object-json":
-        throw new UnsupportedFunctionalityError({
-          functionality: "object-json mode",
-        })
-
-      case "object-tool":
-        throw new UnsupportedFunctionalityError({
-          functionality: "object-tool mode",
-        })
-
-      default: {
-        const _exhaustiveCheck: never = type
-        throw new Error(`Unsupported type: ${_exhaustiveCheck}`)
-      }
-    }
+    return { args, warnings }
   }
 
   async doGenerate(
-    options: Parameters<LanguageModelV1["doGenerate"]>[0],
-  ): Promise<Awaited<ReturnType<LanguageModelV1["doGenerate"]>>> {
+    options: LanguageModelV2CallOptions,
+  ): Promise<Awaited<ReturnType<LanguageModelV2["doGenerate"]>>> {
     const { args, warnings } = this.getArgs(options)
 
     const { responseHeaders, value: responseBody } = await postJsonToApi({
       url: this.config.url({ path: "/v1/chat/completions" }),
       headers: combineHeaders(this.config.headers(), options.headers),
       body: args,
-      failedResponseHandler: this.failedResponseHandler,
+      failedResponseHandler: taalasFailedResponseHandler,
       successfulResponseHandler: createJsonResponseHandler(
         TaalasChatResponseSchema,
       ),
@@ -176,7 +143,6 @@ export class TaalasChatLanguageModel implements LanguageModelV1 {
       fetch: this.config.fetch,
     })
 
-    const { messages: rawPrompt, ...rawSettings } = args
     const choice = responseBody.choices[0]
 
     if (!choice) {
@@ -184,25 +150,28 @@ export class TaalasChatLanguageModel implements LanguageModelV1 {
     }
 
     return {
-      text: choice.message.content ?? undefined,
+      content: [{ type: "text", text: choice.message.content ?? "" }],
       finishReason: mapTaalasFinishReason(choice.finish_reason),
       usage: {
-        promptTokens: responseBody.usage?.prompt_tokens ?? Number.NaN,
-        completionTokens:
-          responseBody.usage?.completion_tokens ?? Number.NaN,
+        inputTokens: responseBody.usage?.prompt_tokens ?? undefined,
+        outputTokens: responseBody.usage?.completion_tokens ?? undefined,
+        totalTokens: responseBody.usage?.total_tokens ?? undefined,
       },
-      rawCall: { rawPrompt, rawSettings },
-      rawResponse: { headers: responseHeaders },
-      response: getResponseMetadata(responseBody),
+      response: {
+        ...getResponseMetadata(responseBody),
+        headers: responseHeaders,
+        body: responseBody,
+      },
       warnings,
-      request: { body: JSON.stringify(args) },
+      request: { body: args },
     }
   }
 
   async doStream(
-    options: Parameters<LanguageModelV1["doStream"]>[0],
-  ): Promise<Awaited<ReturnType<LanguageModelV1["doStream"]>>> {
+    options: LanguageModelV2CallOptions,
+  ): Promise<Awaited<ReturnType<LanguageModelV2["doStream"]>>> {
     const { args, warnings } = this.getArgs(options)
+    const generateId = this.config.generateId ?? defaultGenerateId
 
     const requestBody = {
       ...args,
@@ -210,36 +179,35 @@ export class TaalasChatLanguageModel implements LanguageModelV1 {
       stream_options: { include_usage: true },
     }
 
-    const body = JSON.stringify(requestBody)
-
     const { responseHeaders, value: response } = await postJsonToApi({
       url: this.config.url({ path: "/v1/chat/completions" }),
       headers: combineHeaders(this.config.headers(), options.headers),
       body: requestBody,
-      failedResponseHandler: this.failedResponseHandler,
+      failedResponseHandler: taalasFailedResponseHandler,
       successfulResponseHandler:
         createEventSourceResponseHandler(TaalasChatChunkSchema),
       abortSignal: options.abortSignal,
       fetch: this.config.fetch,
     })
 
-    const { messages: rawPrompt, ...rawSettings } = args
-
-    let finishReason: LanguageModelV1FinishReason = "unknown"
+    let finishReason: LanguageModelV2FinishReason = "unknown"
     let usage: {
-      promptTokens: number | undefined
-      completionTokens: number | undefined
+      inputTokens: number | undefined
+      outputTokens: number | undefined
+      totalTokens: number | undefined
     } = {
-      promptTokens: undefined,
-      completionTokens: undefined,
+      inputTokens: undefined,
+      outputTokens: undefined,
+      totalTokens: undefined,
     }
     let isFirstChunk = true
+    let textId: string | undefined
 
     return {
       stream: response.pipeThrough(
         new TransformStream<
           ParseResult<z.infer<typeof TaalasChatChunkSchema>>,
-          LanguageModelV1StreamPart
+          LanguageModelV2StreamPart
         >({
           transform(chunk, controller) {
             if (!chunk.success) {
@@ -252,6 +220,7 @@ export class TaalasChatLanguageModel implements LanguageModelV1 {
 
             if (isFirstChunk) {
               isFirstChunk = false
+              controller.enqueue({ type: "stream-start", warnings })
               controller.enqueue({
                 type: "response-metadata",
                 ...getResponseMetadata(value),
@@ -260,9 +229,9 @@ export class TaalasChatLanguageModel implements LanguageModelV1 {
 
             if (value.usage != null) {
               usage = {
-                promptTokens: value.usage.prompt_tokens ?? undefined,
-                completionTokens:
-                  value.usage.completion_tokens ?? undefined,
+                inputTokens: value.usage.prompt_tokens ?? undefined,
+                outputTokens: value.usage.completion_tokens ?? undefined,
+                totalTokens: value.usage.total_tokens ?? undefined,
               }
             }
 
@@ -273,29 +242,32 @@ export class TaalasChatLanguageModel implements LanguageModelV1 {
             }
 
             if (choice?.delta?.content != null) {
+              if (textId == null) {
+                textId = generateId()
+                controller.enqueue({ type: "text-start", id: textId })
+              }
               controller.enqueue({
                 type: "text-delta",
-                textDelta: choice.delta.content,
+                id: textId,
+                delta: choice.delta.content,
               })
             }
           },
 
           flush(controller) {
+            if (textId != null) {
+              controller.enqueue({ type: "text-end", id: textId })
+            }
             controller.enqueue({
               type: "finish",
               finishReason,
-              usage: {
-                promptTokens: usage.promptTokens ?? Number.NaN,
-                completionTokens: usage.completionTokens ?? Number.NaN,
-              },
+              usage,
             })
           },
         }),
       ),
-      rawCall: { rawPrompt, rawSettings },
-      rawResponse: { headers: responseHeaders },
-      warnings,
-      request: { body },
+      request: { body: requestBody },
+      response: { headers: responseHeaders },
     }
   }
 }

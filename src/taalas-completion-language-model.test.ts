@@ -7,11 +7,14 @@ describe("TaalasCompletionLanguageModel", () => {
   it("has correct spec version, provider, and modelId", () => {
     const model = createCompletionModel()
 
-    expect(model.specificationVersion).toBe("v1")
+    expect(model.specificationVersion).toBe("v2")
     expect(model.provider).toBe("taalas.completion")
     expect(model.modelId).toBe("llama3.1-8B")
-    expect(model.defaultObjectGenerationMode).toBeUndefined()
-    expect(model.supportsStructuredOutputs).toBe(false)
+  })
+
+  it("has empty supportedUrls", () => {
+    const model = createCompletionModel()
+    expect(model.supportedUrls).toEqual({})
   })
 
   describe("doGenerate", () => {
@@ -43,8 +46,6 @@ describe("TaalasCompletionLanguageModel", () => {
       })
 
       const result = await model.doGenerate({
-        inputFormat: "prompt",
-        mode: { type: "regular" },
         prompt: [
           { role: "user", content: [{ type: "text", text: "Tell me a joke" }] },
         ],
@@ -53,9 +54,15 @@ describe("TaalasCompletionLanguageModel", () => {
       expect(capturedUrl).toBe("https://api.taalas.com/v1/completions")
       expect(capturedBody.model).toBe("llama3.1-8B")
       expect(capturedBody.prompt).toBe("Tell me a joke")
-      expect(result.text).toBe("Why did the chicken cross the road?")
+
+      const textContent = result.content.find((c) => c.type === "text")
+      expect(textContent?.text).toBe("Why did the chicken cross the road?")
       expect(result.finishReason).toBe("stop")
-      expect(result.usage).toEqual({ promptTokens: 3, completionTokens: 8 })
+      expect(result.usage).toEqual({
+        inputTokens: 3,
+        outputTokens: 8,
+        totalTokens: undefined,
+      })
     })
 
     it("passes echo and suffix settings", async () => {
@@ -76,8 +83,6 @@ describe("TaalasCompletionLanguageModel", () => {
       })
 
       await model.doGenerate({
-        inputFormat: "prompt",
-        mode: { type: "regular" },
         prompt: [{ role: "user", content: [{ type: "text", text: "Hi" }] }],
       })
 
@@ -96,8 +101,6 @@ describe("TaalasCompletionLanguageModel", () => {
 
       await expect(
         model.doGenerate({
-          inputFormat: "prompt",
-          mode: { type: "regular" },
           prompt: [{ role: "user", content: [{ type: "text", text: "Hi" }] }],
         }),
       ).rejects.toThrow("No choices returned in Taalas completion response")
@@ -108,29 +111,13 @@ describe("TaalasCompletionLanguageModel", () => {
 
       await expect(
         model.doGenerate({
-          inputFormat: "prompt",
-          mode: {
-            type: "regular",
-            tools: [{
-              type: "function",
-              name: "test",
-              description: "test",
-              parameters: { type: "object", properties: {} },
-            }],
-          },
           prompt: [{ role: "user", content: [{ type: "text", text: "Hi" }] }],
-        }),
-      ).rejects.toThrow(UnsupportedFunctionalityError)
-    })
-
-    it("throws on object-json mode", async () => {
-      const model = createCompletionModel()
-
-      await expect(
-        model.doGenerate({
-          inputFormat: "prompt",
-          mode: { type: "object-json" },
-          prompt: [{ role: "user", content: [{ type: "text", text: "Hi" }] }],
+          tools: [{
+            type: "function",
+            name: "test",
+            description: "test",
+            inputSchema: { type: "object", properties: {} },
+          }],
         }),
       ).rejects.toThrow(UnsupportedFunctionalityError)
     })
@@ -159,8 +146,6 @@ describe("TaalasCompletionLanguageModel", () => {
       })
 
       const { stream } = await model.doStream({
-        inputFormat: "prompt",
-        mode: { type: "regular" },
         prompt: [
           { role: "user", content: [{ type: "text", text: "Tell me a joke" }] },
         ],
@@ -174,18 +159,19 @@ describe("TaalasCompletionLanguageModel", () => {
         parts.push(value)
       }
 
-      expect(parts[0].type).toBe("response-metadata")
-      expect(parts[0].id).toBe("cmpl-1")
+      expect(parts[0].type).toBe("stream-start")
+      expect(parts[1].type).toBe("response-metadata")
+      expect(parts[1].id).toBe("cmpl-1")
 
       const textDeltas = parts
         .filter((p) => p.type === "text-delta")
-        .map((p) => p.textDelta)
+        .map((p) => p.delta)
       expect(textDeltas).toEqual(["Why did ", "the chicken", ""])
 
       const finish = parts.find((p) => p.type === "finish")
       expect(finish.finishReason).toBe("stop")
-      expect(finish.usage.promptTokens).toBe(3)
-      expect(finish.usage.completionTokens).toBe(5)
+      expect(finish.usage.inputTokens).toBe(3)
+      expect(finish.usage.outputTokens).toBe(5)
     })
 
     it("sets stream: true in request body", async () => {
@@ -218,8 +204,6 @@ describe("TaalasCompletionLanguageModel", () => {
       })
 
       const { stream } = await model.doStream({
-        inputFormat: "prompt",
-        mode: { type: "regular" },
         prompt: [{ role: "user", content: [{ type: "text", text: "Hi" }] }],
       })
 

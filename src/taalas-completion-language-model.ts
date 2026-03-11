@@ -1,13 +1,10 @@
 import type {
-  APICallError,
-  LanguageModelV1,
-  LanguageModelV1FinishReason,
-  LanguageModelV1StreamPart,
+  LanguageModelV2,
+  LanguageModelV2CallOptions,
+  LanguageModelV2FinishReason,
+  LanguageModelV2StreamPart,
 } from "@ai-sdk/provider"
-import type {
-  ParseResult,
-  ResponseHandler,
-} from "@ai-sdk/provider-utils"
+import type { ParseResult } from "@ai-sdk/provider-utils"
 import type {
   TaalasCompletionModelId,
   TaalasCompletionSettings,
@@ -18,6 +15,7 @@ import {
   combineHeaders,
   createEventSourceResponseHandler,
   createJsonResponseHandler,
+  generateId as defaultGenerateId,
   postJsonToApi,
 } from "@ai-sdk/provider-utils"
 import { z } from "zod"
@@ -41,6 +39,7 @@ const TaalasCompletionResponseSchema = z.object({
     .object({
       prompt_tokens: z.number(),
       completion_tokens: z.number(),
+      total_tokens: z.number().nullish(),
     })
     .nullish(),
 })
@@ -61,6 +60,7 @@ const TaalasCompletionChunkSchema = z.union([
       .object({
         prompt_tokens: z.number(),
         completion_tokens: z.number(),
+        total_tokens: z.number().nullish(),
       })
       .nullish(),
   }),
@@ -73,16 +73,14 @@ const TaalasCompletionChunkSchema = z.union([
   }),
 ])
 
-export class TaalasCompletionLanguageModel implements LanguageModelV1 {
-  readonly specificationVersion = "v1"
-  readonly defaultObjectGenerationMode = undefined
-  readonly supportsStructuredOutputs = false
+export class TaalasCompletionLanguageModel implements LanguageModelV2 {
+  readonly specificationVersion = "v2"
+  readonly supportedUrls = {}
 
   readonly modelId: TaalasCompletionModelId
   readonly settings: TaalasCompletionSettings
 
   private readonly config: TaalasModelConfig
-  private readonly failedResponseHandler: ResponseHandler<APICallError>
 
   constructor(
     modelId: TaalasCompletionModelId,
@@ -92,93 +90,64 @@ export class TaalasCompletionLanguageModel implements LanguageModelV1 {
     this.modelId = modelId
     this.settings = settings
     this.config = config
-    this.failedResponseHandler = taalasFailedResponseHandler
   }
 
   get provider(): string {
     return this.config.provider
   }
 
-  private getArgs({
-    mode,
-    inputFormat,
-    prompt,
-    maxTokens,
-    temperature,
-    topP,
-    topK,
-    frequencyPenalty,
-    presencePenalty,
-    stopSequences: userStopSequences,
-    responseFormat,
-  }: Parameters<LanguageModelV1["doGenerate"]>[0]) {
-    const type = mode.type
+  private getArgs(options: LanguageModelV2CallOptions) {
     const warnings = collectUnsupportedWarnings({
-      topK,
-      frequencyPenalty,
-      presencePenalty,
-      responseFormat,
+      topK: options.topK,
+      frequencyPenalty: options.frequencyPenalty,
+      presencePenalty: options.presencePenalty,
+      responseFormat: options.responseFormat,
     })
 
+    if (options.tools?.length) {
+      throw new UnsupportedFunctionalityError({
+        functionality: "tools",
+      })
+    }
+    if (options.toolChoice) {
+      throw new UnsupportedFunctionalityError({
+        functionality: "toolChoice",
+      })
+    }
+
     const { prompt: completionPrompt, stopSequences } =
-      convertToTaalasCompletionPrompt({ prompt, inputFormat })
+      convertToTaalasCompletionPrompt({ prompt: options.prompt })
 
-    const stop = [...(stopSequences ?? []), ...(userStopSequences ?? [])]
+    const stop = [
+      ...(stopSequences ?? []),
+      ...(options.stopSequences ?? []),
+    ]
 
-    const baseArgs = {
+    const args = {
       model: this.modelId,
       echo: this.settings.echo,
       suffix: this.settings.suffix,
       user: this.settings.user,
-      max_tokens: maxTokens,
-      temperature,
-      top_p: topP,
+      max_tokens: options.maxOutputTokens,
+      temperature: options.temperature,
+      top_p: options.topP,
       prompt: completionPrompt,
       stop: stop.length > 0 ? stop : undefined,
     }
 
-    switch (type) {
-      case "regular": {
-        if (mode.tools?.length) {
-          throw new UnsupportedFunctionalityError({
-            functionality: "tools",
-          })
-        }
-        if (mode.toolChoice) {
-          throw new UnsupportedFunctionalityError({
-            functionality: "toolChoice",
-          })
-        }
-        return { args: baseArgs, warnings }
-      }
-
-      case "object-json":
-        throw new UnsupportedFunctionalityError({
-          functionality: "object-json mode",
-        })
-
-      case "object-tool":
-        throw new UnsupportedFunctionalityError({
-          functionality: "object-tool mode",
-        })
-
-      default: {
-        const _exhaustiveCheck: never = type
-        throw new Error(`Unsupported type: ${_exhaustiveCheck}`)
-      }
-    }
+    return { args, warnings }
   }
 
   async doGenerate(
-    options: Parameters<LanguageModelV1["doGenerate"]>[0],
-  ): Promise<Awaited<ReturnType<LanguageModelV1["doGenerate"]>>> {
+    options: LanguageModelV2CallOptions,
+  ): Promise<Awaited<ReturnType<LanguageModelV2["doGenerate"]>>> {
     const { args, warnings } = this.getArgs(options)
 
     const { responseHeaders, value: response } = await postJsonToApi({
       url: this.config.url({ path: "/v1/completions" }),
       headers: combineHeaders(this.config.headers(), options.headers),
       body: args,
-      failedResponseHandler: this.failedResponseHandler,
+      failedResponseHandler: taalasFailedResponseHandler,
       successfulResponseHandler: createJsonResponseHandler(
         TaalasCompletionResponseSchema,
       ),
@@ -186,7 +155,6 @@ export class TaalasCompletionLanguageModel implements LanguageModelV1 {
       fetch: this.config.fetch,
     })
 
-    const { prompt: rawPrompt, ...rawSettings } = args
     const choice = response.choices[0]
 
     if (!choice) {
@@ -194,24 +162,28 @@ export class TaalasCompletionLanguageModel implements LanguageModelV1 {
     }
 
     return {
-      text: choice.text,
+      content: [{ type: "text", text: choice.text }],
       usage: {
-        promptTokens: response.usage?.prompt_tokens ?? Number.NaN,
-        completionTokens: response.usage?.completion_tokens ?? Number.NaN,
+        inputTokens: response.usage?.prompt_tokens ?? undefined,
+        outputTokens: response.usage?.completion_tokens ?? undefined,
+        totalTokens: response.usage?.total_tokens ?? undefined,
       },
       finishReason: mapTaalasFinishReason(choice.finish_reason),
-      rawCall: { rawPrompt, rawSettings },
-      rawResponse: { headers: responseHeaders },
-      response: getResponseMetadata(response),
+      response: {
+        ...getResponseMetadata(response),
+        headers: responseHeaders,
+        body: response,
+      },
       warnings,
-      request: { body: JSON.stringify(args) },
+      request: { body: args },
     }
   }
 
   async doStream(
-    options: Parameters<LanguageModelV1["doStream"]>[0],
-  ): Promise<Awaited<ReturnType<LanguageModelV1["doStream"]>>> {
+    options: LanguageModelV2CallOptions,
+  ): Promise<Awaited<ReturnType<LanguageModelV2["doStream"]>>> {
     const { args, warnings } = this.getArgs(options)
+    const generateId = this.config.generateId ?? defaultGenerateId
 
     const requestBody = {
       ...args,
@@ -222,27 +194,31 @@ export class TaalasCompletionLanguageModel implements LanguageModelV1 {
       url: this.config.url({ path: "/v1/completions" }),
       headers: combineHeaders(this.config.headers(), options.headers),
       body: requestBody,
-      failedResponseHandler: this.failedResponseHandler,
+      failedResponseHandler: taalasFailedResponseHandler,
       successfulResponseHandler:
         createEventSourceResponseHandler(TaalasCompletionChunkSchema),
       abortSignal: options.abortSignal,
       fetch: this.config.fetch,
     })
 
-    const { prompt: rawPrompt, ...rawSettings } = args
-
-    let finishReason: LanguageModelV1FinishReason = "unknown"
-    let usage: { promptTokens: number; completionTokens: number } = {
-      promptTokens: Number.NaN,
-      completionTokens: Number.NaN,
+    let finishReason: LanguageModelV2FinishReason = "unknown"
+    let usage: {
+      inputTokens: number | undefined
+      outputTokens: number | undefined
+      totalTokens: number | undefined
+    } = {
+      inputTokens: undefined,
+      outputTokens: undefined,
+      totalTokens: undefined,
     }
     let isFirstChunk = true
+    let textId: string | undefined
 
     return {
       stream: response.pipeThrough(
         new TransformStream<
           ParseResult<z.infer<typeof TaalasCompletionChunkSchema>>,
-          LanguageModelV1StreamPart
+          LanguageModelV2StreamPart
         >({
           transform(chunk, controller) {
             if (!chunk.success) {
@@ -264,6 +240,7 @@ export class TaalasCompletionLanguageModel implements LanguageModelV1 {
 
             if (isFirstChunk) {
               isFirstChunk = false
+              controller.enqueue({ type: "stream-start", warnings })
               controller.enqueue({
                 type: "response-metadata",
                 ...getResponseMetadata(value),
@@ -272,8 +249,9 @@ export class TaalasCompletionLanguageModel implements LanguageModelV1 {
 
             if (value.usage != null) {
               usage = {
-                promptTokens: value.usage.prompt_tokens,
-                completionTokens: value.usage.completion_tokens,
+                inputTokens: value.usage.prompt_tokens,
+                outputTokens: value.usage.completion_tokens,
+                totalTokens: value.usage.total_tokens ?? undefined,
               }
             }
 
@@ -284,14 +262,22 @@ export class TaalasCompletionLanguageModel implements LanguageModelV1 {
             }
 
             if (choice?.text != null) {
+              if (textId == null) {
+                textId = generateId()
+                controller.enqueue({ type: "text-start", id: textId })
+              }
               controller.enqueue({
                 type: "text-delta",
-                textDelta: choice.text,
+                id: textId,
+                delta: choice.text,
               })
             }
           },
 
           flush(controller) {
+            if (textId != null) {
+              controller.enqueue({ type: "text-end", id: textId })
+            }
             controller.enqueue({
               type: "finish",
               finishReason,
@@ -300,10 +286,8 @@ export class TaalasCompletionLanguageModel implements LanguageModelV1 {
           },
         }),
       ),
-      rawCall: { rawPrompt, rawSettings },
-      rawResponse: { headers: responseHeaders },
-      warnings,
-      request: { body: JSON.stringify(requestBody) },
+      request: { body: requestBody },
+      response: { headers: responseHeaders },
     }
   }
 }

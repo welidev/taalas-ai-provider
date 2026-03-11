@@ -82,8 +82,6 @@ describe("createTaalas", () => {
 
     const model = provider("llama3.1-8B")
     await model.doGenerate({
-      inputFormat: "messages",
-      mode: { type: "regular" },
       prompt: [{ role: "user", content: [{ type: "text", text: "Hi" }] }],
     })
 

@@ -1,4 +1,4 @@
-import type { LanguageModelV1Prompt } from "@ai-sdk/provider"
+import type { LanguageModelV2Prompt } from "@ai-sdk/provider"
 import {
   InvalidPromptError,
   UnsupportedFunctionalityError,
@@ -6,12 +6,10 @@ import {
 
 export function convertToTaalasCompletionPrompt({
   prompt,
-  inputFormat,
   user = "user",
   assistant = "assistant",
 }: {
-  prompt: LanguageModelV1Prompt
-  inputFormat: "prompt" | "messages"
+  prompt: LanguageModelV2Prompt
   user?: string
   assistant?: string
 }): {
@@ -19,7 +17,6 @@ export function convertToTaalasCompletionPrompt({
   stopSequences?: string[]
 } {
   if (
-    inputFormat === "prompt" &&
     prompt.length === 1 &&
     prompt[0].role === "user" &&
     prompt[0].content.length === 1 &&
@@ -49,9 +46,9 @@ export function convertToTaalasCompletionPrompt({
             switch (part.type) {
               case "text":
                 return part.text
-              case "image":
+              case "file":
                 throw new UnsupportedFunctionalityError({
-                  functionality: "images",
+                  functionality: "files",
                 })
               default:
                 throw new Error(`Unsupported content part type: ${(part as { type: string }).type}`)
