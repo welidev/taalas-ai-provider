@@ -1,6 +1,6 @@
 {
   "name": "taalas-ai-provider",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Vercel AI SDK provider for the Taalas API (llama3.1-8B)",
   "license": "MIT",
   "repository": {
@@ -51,11 +51,11 @@
     "prepublishOnly": "npm run clean && npm run build"
   },
   "peerDependencies": {
-    "ai": "^6.0.0"
+    "ai": "^5.0.0"
   },
   "dependencies": {
-    "@ai-sdk/provider": "^3.0.0",
-    "@ai-sdk/provider-utils": "^4.0.0"
+    "@ai-sdk/provider": "^2.0.0",
+    "@ai-sdk/provider-utils": "^3.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.13.1",
